@@ -118,7 +118,7 @@ const make = (options) => {
             async markDone(output) {
                 if (row?.id && rootHash !==undefined) {
                     return await client.query(
-                        `UPDATE ${tableName} SET status = $2, output = $3, vars = $4 WHERE id = $1`,
+                        `UPDATE ${tableName} SET status = $2, output = $3, vars = $4, error = null WHERE id = $1`,
                         [row.id, STATUS_DONE, output, row?.vars ? JSON.stringify(row.vars) : null]
                     );
                 }
@@ -134,7 +134,7 @@ const make = (options) => {
             async markFailed(error) {
                 if (row?.id && rootHash !==undefined) {
                     return await client.query(
-                        `UPDATE ${tableName} SET status = $2, output = $3 WHERE id = $1`,
+                        `UPDATE ${tableName} SET status = $2, error = $3, output = null WHERE id = $1`,
                         [row.id, STATUS_FAILED, serializeError(error)]
                     );
                 }
