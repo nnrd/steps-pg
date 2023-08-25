@@ -67,7 +67,7 @@ const make = (options) => {
     const getRun = async (name, hash, rootHash) => {
 
         const client = await pool.connect();
-        const row = await getOrCreateStepRow(client, name, hash, rootHash);
+        const row = rootHash ? await getOrCreateStepRow(client, name, hash, rootHash) : await getStepRow(client, name, hash);
         await client.release();
 
         return {
