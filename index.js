@@ -1,6 +1,5 @@
 'use strict';
 const PG = require('pg');
-const { serializeError } = require('serialize-error');
 
 const DEFAULT_PG_POOL_OPTIONS = {
     connectionTimeoutMillis: 0,
@@ -16,6 +15,11 @@ const STATUS_RUNNING = 'R';
 const STATUS_DONE = 'D';
 const STATUS_FAILED = 'F';
 
+
+const serializeError = (error) => {
+    return JSON.stringify(error, Object.getOwnPropertyNames(error));
+};
+
 const make = (options) => {
 
     const pgPoolOptions = {DEFAULT_PG_POOL_OPTIONS, ...options?.pool, ...options?.client};
@@ -23,13 +27,15 @@ const make = (options) => {
     const pool = new PG.Pool(pgPoolOptions);
 
     const getStepRow = async (client, name, hash) => {
-        const [row] = await client.query(`SELECT * FROM "${tableName}" WHERE name = $1 AND hash = $2`, [name, hash]);
+        const result = await client.query(`SELECT * FROM "${tableName}" WHERE name = $1 AND hash = $2`, [name, hash]);
+        const row = result.rows[0];
         return row;
     };
 
     const getOrCreateStepRow = async (client, name, hash, rootHash) => {
         let row = await getStepRow(client, name, hash);
-        if (row) {
+
+        if (!row) {
             row = {
                 name,
                 hash,
@@ -38,11 +44,11 @@ const make = (options) => {
             };
 
             const insert = await client.query(
-                `INSERT INTO "${tableName} (name, hash, rootHash, status) VALUES ($1, $2, $3, $4) RETURNING (id)`,
+                `INSERT INTO ${tableName} (name, hash, rootHash, status) VALUES ($1, $2, $3, $4) RETURNING (id)`,
                 [row.name, row.hash, row.rootHash, row.status]
             );
 
-            row.id = insert.id;
+            row.id = insert.rows[0].id;
         }
 
         return row;
@@ -50,7 +56,10 @@ const make = (options) => {
 
     const updateStatus = async (client, row, status) => {
         if (row?.id) {
-            return await client.query(`UPDATE ${tableName} SET status = $2 WHERE id = $1`, [row.id, status]);
+            const result = await client.query(`UPDATE ${tableName} SET status = $2 WHERE id = $1`, [row.id, status]);
+
+            console.log('UPDATE STATUS', result);
+            return result.rows[0];
         }
 
         return false;
@@ -68,6 +77,7 @@ const make = (options) => {
 
         const client = await pool.connect();
         const row = rootHash ? await getOrCreateStepRow(client, name, hash, rootHash) : await getStepRow(client, name, hash);
+        console.log('ROW', row?.name, row?.status, row?.output);
         await client.release();
 
         return {
@@ -101,10 +111,12 @@ const make = (options) => {
              */
             async markRunning() {
                 if (row?.id && rootHash !==undefined) {
-                    return await client.query(
+                    const result = await client.query(
                         `UPDATE ${tableName} SET status = $2 WHERE id = $1`,
                         [row.id, STATUS_RUNNING]
                     );
+
+                    return result.rowCount;
                 }
 
                 return false;
@@ -117,7 +129,7 @@ const make = (options) => {
              */
             async markDone(output) {
                 if (row?.id && rootHash !==undefined) {
-                    return await client.query(
+                    const result = await client.query(
                         `UPDATE ${tableName} SET status = $2, output = $3, vars = $4, error = null WHERE id = $1`,
                         [
                             row.id, STATUS_DONE,
@@ -125,6 +137,8 @@ const make = (options) => {
                             row?.vars ? JSON.stringify(row.vars) : null
                         ]
                     );
+
+                    return result.rowCount;
                 }
 
                 return false;
@@ -137,13 +151,23 @@ const make = (options) => {
              */
             async markFailed(error) {
                 if (row?.id && rootHash !==undefined) {
-                    return await client.query(
+                    const result = await client.query(
                         `UPDATE ${tableName} SET status = $2, error = $3, output = null WHERE id = $1`,
                         [row.id, STATUS_FAILED, serializeError(error)]
                     );
+
+                    return result.rowCount;
                 }
 
                 return false;
+            },
+
+            /**
+             * Get step run output
+             * @returns {object}
+             */
+            getOutput() {
+                return row.output;
             },
 
             /**
