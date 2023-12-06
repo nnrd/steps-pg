@@ -119,7 +119,11 @@ const make = (options) => {
                 if (row?.id && rootHash !==undefined) {
                     return await client.query(
                         `UPDATE ${tableName} SET status = $2, output = $3, vars = $4, error = null WHERE id = $1`,
-                        [row.id, STATUS_DONE, output, row?.vars ? JSON.stringify(row.vars) : null]
+                        [
+                            row.id, STATUS_DONE,
+                            output ? JSON.stringify(output) : null,
+                            row?.vars ? JSON.stringify(row.vars) : null
+                        ]
                     );
                 }
 
