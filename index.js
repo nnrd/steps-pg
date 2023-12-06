@@ -4,7 +4,7 @@ const PG = require('pg');
 const DEFAULT_PG_POOL_OPTIONS = {
     connectionTimeoutMillis: 0,
     idleTimeoutMillis: 3600000, // 1 hour
-    max: 10,
+    max: 5,
     allowExitOnIdle: false,
 };
 
