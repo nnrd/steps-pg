@@ -1,4 +1,6 @@
 {
+  "name": "execution-steps-storage-pg",
+  "version": "0.1.0",
   "dependencies": {
     "pg": "^8.11.3"
   }

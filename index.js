@@ -22,7 +22,7 @@ const serializeError = (error) => {
 
 const make = (options) => {
 
-    const pgPoolOptions = {DEFAULT_PG_POOL_OPTIONS, ...options?.pool, ...options?.client};
+    const pgPoolOptions = {...DEFAULT_PG_POOL_OPTIONS, ...options?.pool, ...options?.client};
     const tableName = options?.table?.name || DEFAULT_STEPS_TABLE;
     const pool = new PG.Pool(pgPoolOptions);
 
@@ -58,7 +58,6 @@ const make = (options) => {
         if (row?.id) {
             const result = await client.query(`UPDATE ${tableName} SET status = $2 WHERE id = $1`, [row.id, status]);
 
-            console.log('UPDATE STATUS', result);
             return result.rows[0];
         }
 
@@ -77,7 +76,6 @@ const make = (options) => {
 
         const client = await pool.connect();
         const row = rootHash ? await getOrCreateStepRow(client, name, hash, rootHash) : await getStepRow(client, name, hash);
-        console.log('ROW', row?.name, row?.status, row?.output);
         await client.release();
 
         return {
