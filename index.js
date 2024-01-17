@@ -6,6 +6,7 @@ const DEFAULT_PG_POOL_OPTIONS = {
     idleTimeoutMillis: 3600000, // 1 hour
     max: 5,
     allowExitOnIdle: false,
+    database: 'steps',
 };
 
 const DEFAULT_STEPS_TABLE = 'steps';
