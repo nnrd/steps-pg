@@ -150,8 +150,8 @@ const make = (options) => {
             async markFailed(error) {
                 if (row?.id && rootHash !==undefined) {
                     const result = await client.query(
-                        `UPDATE ${tableName} SET status = $2, error = $3, output = null WHERE id = $1`,
-                        [row.id, STATUS_FAILED, serializeError(error)]
+                        `UPDATE ${tableName} SET status = $2, error = $3, vars = $4, output = null WHERE id = $1`,
+                        [row.id, STATUS_FAILED, serializeError(error), row?.vars ? JSON.stringify(row.vars) : null]
                     );
 
                     return result.rowCount;
