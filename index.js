@@ -16,7 +16,6 @@ const STATUS_RUNNING = 'R';
 const STATUS_DONE = 'D';
 const STATUS_FAILED = 'F';
 
-
 const serializeError = (error) => {
     return JSON.stringify(error, Object.getOwnPropertyNames(error));
 };
@@ -26,6 +25,22 @@ const make = (options) => {
     const pgPoolOptions = {...DEFAULT_PG_POOL_OPTIONS, ...options?.pool, ...options?.client};
     const tableName = options?.table?.name || DEFAULT_STEPS_TABLE;
     const pool = new PG.Pool(pgPoolOptions);
+
+    const activeRuns = new Map();
+    const addActiveRun = (hash, run) => activeRuns.set(hash, run);
+    const removeActiveRun = (hash) => activeRuns.delete(hash);
+
+    const finishActiveRuns = async () => {
+        const error = new Error('Exit');
+        const finish = [];
+        for(const [hash, run] of activeRuns.entries()) {
+            finish.push(run.markFailed(error));
+        }
+
+        return await Promise.all(finish);
+    };
+
+    process.on('beforeExit', finishActiveRuns);
 
     const getStepRow = async (client, name, hash) => {
         const result = await client.query(`SELECT * FROM "${tableName}" WHERE name = $1 AND hash = $2`, [name, hash]);
@@ -74,12 +89,11 @@ const make = (options) => {
      * @returns {}
      */
     const getRun = async (name, hash, rootHash) => {
-
         const client = await pool.connect();
         const row = rootHash ? await getOrCreateStepRow(client, name, hash, rootHash) : await getStepRow(client, name, hash);
         await client.release();
 
-        return {
+        const run = {
             /**
              * Check if step run is done successfully
              * @returns {boolean}
@@ -110,12 +124,20 @@ const make = (options) => {
              */
             async markRunning() {
                 if (row?.id && rootHash !==undefined) {
-                    const result = await client.query(
-                        `UPDATE ${tableName} SET status = $2 WHERE id = $1`,
-                        [row.id, STATUS_RUNNING]
-                    );
+                    addActiveRun(hash, run);
+                    const client = await pool.connect();
+                    try {
+                        const result = await client.query(
+                            `UPDATE ${tableName} SET status = $2 WHERE id = $1`,
+                            [row.id, STATUS_RUNNING]
+                        );
 
-                    return result.rowCount;
+                        return result.rowCount;
+                    } finally {
+                        if (client) {
+                            await client.release();
+                        }
+                    }
                 }
 
                 return false;
@@ -128,16 +150,25 @@ const make = (options) => {
              */
             async markDone(output) {
                 if (row?.id && rootHash !==undefined) {
-                    const result = await client.query(
-                        `UPDATE ${tableName} SET status = $2, output = $3, vars = $4, error = null WHERE id = $1`,
-                        [
-                            row.id, STATUS_DONE,
-                            output ? JSON.stringify(output) : null,
-                            row?.vars ? JSON.stringify(row.vars) : null
-                        ]
-                    );
+                    removeActiveRun(hash);
+                    const client = await pool.connect();
+                    try {
+                        const result = await client.query(
+                            `UPDATE ${tableName} SET status = $2, output = $3, vars = $4, error = null WHERE id = $1`,
+                            [
+                                row.id, STATUS_DONE,
+                                output ? JSON.stringify(output) : null,
+                                row?.vars ? JSON.stringify(row.vars) : null
+                            ]
+                        );
 
-                    return result.rowCount;
+
+                        return result.rowCount;
+                    } finally {
+                        if (client) {
+                            await client.release();
+                        }
+                    }
                 }
 
                 return false;
@@ -150,12 +181,20 @@ const make = (options) => {
              */
             async markFailed(error) {
                 if (row?.id && rootHash !==undefined) {
-                    const result = await client.query(
-                        `UPDATE ${tableName} SET status = $2, error = $3, vars = $4, output = null WHERE id = $1`,
-                        [row.id, STATUS_FAILED, serializeError(error), row?.vars ? JSON.stringify(row.vars) : null]
-                    );
+                    removeActiveRun(hash);
+                    const client = await pool.connect();
+                    try {
+                        const result = await client.query(
+                            `UPDATE ${tableName} SET status = $2, error = $3, vars = $4, output = null WHERE id = $1`,
+                            [row.id, STATUS_FAILED, serializeError(error), row?.vars ? JSON.stringify(row.vars) : null]
+                        );
 
-                    return result.rowCount;
+                        return result.rowCount;
+                    } finally {
+                        if (client) {
+                            await client.release();
+                        }
+                    }
                 }
 
                 return false;
@@ -183,6 +222,8 @@ const make = (options) => {
                 return row.vars;
             },
         };
+
+        return run;
     };
 
     return {
