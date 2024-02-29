@@ -128,8 +128,8 @@ const make = (options) => {
                     const client = await pool.connect();
                     try {
                         const result = await client.query(
-                            `UPDATE ${tableName} SET status = $2 WHERE id = $1`,
-                            [row.id, STATUS_RUNNING]
+                            `UPDATE ${tableName} SET status = $2, vars = $3 WHERE id = $1`,
+                            [row.id, STATUS_RUNNING, row?.vars ? JSON.stringify(row.vars) : null]
                         );
 
                         return result.rowCount;
