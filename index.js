@@ -20,7 +20,13 @@ const serializeError = (error) => {
     return JSON.stringify(error, Object.getOwnPropertyNames(error));
 };
 
+const now = () => {
+    return (new Date).toISOString();
+};
+
 const make = (options) => {
+
+    const hostname = process.env.HOSTNAME || null;
 
     const pgPoolOptions = {...DEFAULT_PG_POOL_OPTIONS, ...options?.pool, ...options?.client};
     const tableName = options?.table?.name || DEFAULT_STEPS_TABLE;
@@ -68,16 +74,6 @@ const make = (options) => {
         }
 
         return row;
-    };
-
-    const updateStatus = async (client, row, status) => {
-        if (row?.id) {
-            const result = await client.query(`UPDATE ${tableName} SET status = $2 WHERE id = $1`, [row.id, status]);
-
-            return result.rows[0];
-        }
-
-        return false;
     };
 
     /**
@@ -128,8 +124,8 @@ const make = (options) => {
                     const client = await pool.connect();
                     try {
                         const result = await client.query(
-                            `UPDATE ${tableName} SET status = $2, vars = $3 WHERE id = $1`,
-                            [row.id, STATUS_RUNNING, row?.vars ? JSON.stringify(row.vars) : null]
+                            `UPDATE ${tableName} SET status = $2, vars = $3, hostname = $4, started_at = $5 WHERE id = $1`,
+                            [row.id, STATUS_RUNNING, row?.vars ? JSON.stringify(row.vars) : null, hostname, now()]
                         );
 
                         return result.rowCount;
